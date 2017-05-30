@@ -1,0 +1,17 @@
+# Python
+__pycache__/*
+*.pyc
+
+
+# Packaging
+build/*
+dist/*
+cueillette.egg-info/*
+
+# Mypy
+.mypy_cache/*
+
+# Sub directories.
+tests/*
+docs/*
+
