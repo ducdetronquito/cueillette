@@ -47,8 +47,8 @@ Usage
     
     from cueillette import facebook
     
-    posts = facebook.posts.get('bhuphusis', '2017-06-12', 1)
-    print(posts[0])
+    posts = facebook.posts.get('bhuphusis', '2017-06-12', 2)
+    print(posts[1])
     {
         'publication_date': 'dimanche 11 juin 2017, 00:48',
         'media': {

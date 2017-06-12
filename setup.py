@@ -8,7 +8,8 @@ setup(
     packages=find_packages(exclude=['docs', 'tests*']),
     version='0.1.0',
     description=(
-        'A toolbox to get rid of those fucking proprietary web APIs.'
+        "Access content from websites who have a fucking proprietary API,"
+        " or websites who haven't any. 🖕"
     ),
     long_description=readme,
     author='Guillaume Paulet',

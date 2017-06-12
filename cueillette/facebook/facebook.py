@@ -9,42 +9,42 @@ import ujson
 
 # TODO
 #   - Search a good caching system.
-#   - Post medias : extract shared facebook post.
 #   - Add method to extract post from a post url. (_Post.get_one())
 #   - Extract videos from /videos
 
+# Cli API:
+#   - cueillette provider
+#   - cueillette facebook posts --timestamp 1494945 --number 5
+#   - cueillette facebook posts --date 2017-06-12 --time 08:00 --number 5
+
 
 class _Post:
-    __slots__ = ()
+    __slots__ = (
+        'date', 'number', 'page_id', 'profile', 'starting_timestamp'
+    )
 
-    @staticmethod
-    def _get_timeline_url(
-            page_id: int,
-            starting_timestamp: int,
-            post_number: int
-        ) -> str:
+    def __init__(self, **kwargs):
+        self.date = kwargs['date']
+        self.number = kwargs['number']
+        self.profile = kwargs['profile']
+        self.starting_timestamp = kwargs['starting_timestamp']
+
+    def _get_timeline_url(self) -> str:
         """
             Returns the timeline url of a profile page.
-
-            Params:
-                - page_id: the ID of a facebook profile.
-                - starting_timestamp
-                - post_number: the number of post to extract before
-                               the *starting_timestamp* timestamp.
         """
         return ''.join((
             'https://www.facebook.com/pages_reaction_units/more/?page_id=',
-            str(page_id),
+            str(self.page_id),
             '&cursor={%22timeline_cursor%22:%22timeline_unit:1:0000000000',
-            str(starting_timestamp),
+            str(self.starting_timestamp),
             '%22,%22timeline_section_cursor%22:{}',
             ',%22has_next_page%22:true}&surface=www_pages_home&unit_count=',
-            str(post_number),
+            str(self.number),
             '&__a=1'
         ))
 
-    @staticmethod
-    def _extract_text_content(html_post) -> dict:
+    def _extract_text_content(self, html_post) -> dict:
         """
             Extract the text of a post.
 
@@ -63,7 +63,7 @@ class _Post:
             'text_content': html_text.text_content()
         }
 
-    def _extract_metadata(html_post) -> dict:
+    def _extract_metadata(self, html_post) -> dict:
         """
             Extract metadata of a post.
 
@@ -93,7 +93,7 @@ class _Post:
             'url': post_url,
         }
 
-    def _extract_multimedia_content(html_post) -> Optional[dict]:
+    def _extract_multimedia_content(self, html_post) -> Optional[dict]:
         """"
             Extract the multimedia content of a facebook post if it exists.
 
@@ -121,14 +121,27 @@ class _Post:
             }
         else:
             media_link = media_tag.find('.//a')
-            image = media_link.find('.//img')
 
-            if image is not None:
-                # The media is a facebook image
-                media = {
-                    'type': 'facebook image',
-                    'url': image.get('src')
-                }
+            media_link_url = media_link.get('href')
+
+            if ('/' + self.profile) in media_link_url:
+                # The media is a facebook content
+                media_link_url = media_link.get('href')
+                if 'permalink' in media_link_url:
+                    # The media is a shared facebook posts
+                    # /!\ For now it seems that it is not possible to
+                    #     grab this content type.
+                    media = {
+                        'type': 'facebook post',
+                        'url': media_link_url,
+                    }
+                else:
+                    # Otherwise the media is a facebook image.
+                    image = media_link.find('.//img')
+                    media = {
+                        'type': 'facebook image',
+                        'url': image.get('src'),
+                    }
             else:
                 # The media is a external hyperlink.
                 # The link href contains a polluted facebook link.
@@ -138,7 +151,7 @@ class _Post:
                 url = url.replace('\\', '')
                 media = {
                     'type': 'external hyperlink',
-                    'url': url
+                    'url': url,
                 }
                 title = media_link.text_content()
 
@@ -149,8 +162,7 @@ class _Post:
             'media': media
         }
 
-    @staticmethod
-    def _get_page_id(profile: str) -> str:
+    def _fetch_page_id(self) -> str:
         """
             Returns the page_id of a facebook profile.
 
@@ -159,16 +171,16 @@ class _Post:
 
             The page_id is hidden inside the profile picture link.
         """
-        mobile_frontpage_url = 'https://m.facebook.com/{}'.format(profile)
+        mobile_frontpage_url = 'https://m.facebook.com/{}'.format(self.profile)
         response = requests.get(mobile_frontpage_url)
         html_page = html.fromstring(response.content)
         header = html_page.get_element_by_id('m-timeline-cover-section')
         profile_pic_link = header.find('.//a').get('href')
         page_id = profile_pic_link.split('/')[3].split('.')[3]
-        return page_id
 
-    @staticmethod
-    def _fetch_data(url: str):
+        self.page_id = page_id
+
+    def _fetch_data(self, url: str):
         """
             Returns the HTML tree of a facebook posts' timeline.
 
@@ -182,24 +194,18 @@ class _Post:
         return html.document_fromstring(html_str)
 
     
-    @staticmethod
-    def _get(
-            page_id: str,
-            starting_timestamp: str,
-            post_number: int
-        ) -> List[dict]:
-        
-        url = _Post._get_timeline_url(page_id, starting_timestamp, post_number)
-        html_page = _Post._fetch_data(url)
+    def _get(self) -> List[dict]:
+        url = self._get_timeline_url()
+        html_page = self._fetch_data(url)
 
         posts = []
         for html_post in html_page.find_class('fbUserContent'):
             post = {}
-            text = _Post._extract_text_content(html_post)
+            text = self._extract_text_content(html_post)
             post.update(text)
-            metadata = _Post._extract_metadata(html_post)
+            metadata = self._extract_metadata(html_post)
             post.update(metadata)
-            media = _Post._extract_multimedia_content(html_post)
+            media = self._extract_multimedia_content(html_post)
             post.update(media)
             posts.append(post)
         return posts
@@ -215,11 +221,18 @@ class _Post:
                 - post_number: the number of post to extract before
                                the *date* date.
         """
-        page_id = _Post._get_page_id(profile)
         starting_timestamp = datetime.strptime(date, '%Y-%m-%d').timestamp()
         starting_timestamp = int(starting_timestamp)
         
-        return _Post._get(page_id, starting_timestamp, post_number)
+        posts = _Post(
+            profile=profile,
+            date=date,
+            starting_timestamp=starting_timestamp,
+            number=post_number,
+        )
+        posts._fetch_page_id()
+
+        return posts._get()
 
 
 # Alias internal bridge class to have a more readable API.
