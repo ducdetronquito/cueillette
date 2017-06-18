@@ -1,1 +1,1 @@
-from .facebook import posts
+from .facebook import posts, notes
