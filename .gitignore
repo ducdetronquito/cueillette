@@ -15,3 +15,6 @@ cueillette.egg-info/*
 tests/*
 docs/*
 
+# Pytest
+.cache/*
+
